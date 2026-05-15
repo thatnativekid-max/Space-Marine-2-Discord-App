@@ -5,7 +5,26 @@ import json
 import os
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+from flask import Flask
+from threading import Thread
 
+# ==============================
+# KEEP ALIVE SERVER
+# ==============================
+
+app = Flask("")
+
+@app.route("/")
+def home():
+    return "Bot is alive"
+
+def run():
+    app.run(host="0.0.0.0", port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+    
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -900,5 +919,6 @@ async def on_member_join(member):
             f"I am the Techsorcist, keeper of your records.\n\n"
             f"Proceed to the Hall of Tempering to begin your trials, {member.mention}."
         )
-
+        
+keep_alive()
 bot.run(TOKEN)
