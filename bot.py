@@ -4,14 +4,10 @@ from discord import app_commands
 import sqlite3
 import os
 from datetime import datetime, timezone
-from threading import Thread
 from io import BytesIO
 from PIL import Image
 import asyncio
-import traceback
-import time 
 from discord.ext import tasks
-import shutil
 
 db_lock = asyncio.Lock()
 event_lock = asyncio.Lock()
@@ -20,80 +16,16 @@ TOKEN = os.getenv("TOKEN")
 
 DB_FILE = "/data/database.db" 
 
-BATTLE_REPORT_CHANNEL_ID = 1500525099655102525
-TECHSORCIST_RECORDS_CHANNEL_ID = 1505702243666497688
-EVENTS_CHANNEL_ID = 1506016793691426936
-GREAT_HALL_CHANNEL_ID = 1393664184771936279
-
 intents = discord.Intents.default() 
 intents.members = True 
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-def is_double_rites_event():
-    now = datetime.now(timezone.utc)
-    return (7 <= now.day <= 10) or (20 <= now.day <= 23)
-  
-def init_db(): 
-    
-    conn = sqlite3.connect(DB_FILE) 
-    cursor = conn.cursor()
-
-    cursor.execute("PRAGMA journal_mode=WAL;")
-    cursor.execute("PRAGMA synchronous=NORMAL;")
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS members (
-            user_id TEXT PRIMARY KEY,
-            rites INTEGER DEFAULT 0,
-            gene INTEGER DEFAULT 0,
-            relics TEXT DEFAULT '[]',
-            completed_challenges TEXT DEFAULT '[]'
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
-init_db()
-
 def get_member_days(member: discord.Member):
     if not member.joined_at:
         return 0
     return (datetime.now(timezone.utc) - member.joined_at).days
-
-def battle_reports_only():
-    async def predicate(interaction: discord.Interaction):
-        if interaction.channel_id != BATTLE_REPORT_CHANNEL_ID:
-            await interaction.response.send_message(
-                "❌ Battle reports may only be used in the designated Battle Reports channel.",
-                ephemeral=True
-            )
-            return False
-        return True
-    return app_commands.check(predicate)
-
-def events_channel_only():
-    async def predicate(interaction: discord.Interaction):
-        if interaction.channel_id != EVENTS_CHANNEL_ID:
-            await interaction.response.send_message(
-                "Event requests may only be used in the Events channel.",
-                ephemeral=True
-            )
-            return False
-        return True
-    return app_commands.check(predicate)
-
-def techsorcist_records_only():
-    async def predicate(interaction: discord.Interaction):
-        if interaction.channel_id != TECHSORCIST_RECORDS_CHANNEL_ID:
-            await interaction.response.send_message(
-                "This command may only be used in Techsorcist Records.",
-                ephemeral=True
-            )
-            return False
-        return True
-    return app_commands.check(predicate)
 
 async def make_grid_image(attachments, cols=2):
     try:
@@ -163,111 +95,27 @@ async def make_grid_image(attachments, cols=2):
     except Exception as e:
         print(f"Image processing error: {e}")
         return None
-    
-class EventApprovalView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Approve", style=discord.ButtonStyle.green)
-    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(
-                "Administrator permission required.",
-                ephemeral=True
-            )
-
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.green()
-        embed.set_footer(text=f"Approved by {interaction.user}")
-
-        await interaction.message.edit(embed=embed, view=None)
-        await interaction.response.send_message("✅ Event approved.", ephemeral=True)
-
-    @discord.ui.button(label="Deny", style=discord.ButtonStyle.red)
-    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(
-                "Administrator permission required.",
-                ephemeral=True
-            )
-
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.red()
-        embed.set_footer(text=f"Denied by {interaction.user}")
-
-        await interaction.message.edit(embed=embed, view=None)
-        await interaction.response.send_message("❌ Event denied.", ephemeral=True)
-
-# ==================================================
-# RANK SYSTEM
-# ==================================================
 
 RANKS = {
-    24: "Scout",
-    95: "Battle Brother",
-    150: "Brother-Initiate",
-    420: "Veteran",
-    600: "Bladeguard Veteran",
-    750: "Sergeant",
-    900: "Lector",
-    1100: "Lector-Sergeant",
-    1350: "Ancient",
-    1600: "Lieutenant",
-    2000: "Almoner",
-    2500: "Almoner-Lieutenant"
+    25: "Scout",
+    100: "Battle Brother",
+    300: "Veteran",
+    450: "Bladeguard Veteran",
+    650: "Sergeant",
+    900: "Veteran-Sergeant",
+    1200: "Ancient",
+    1500: "Lieutenant"
 }
 
-HIDDEN_PROGRESSION_RANKS = {
+SPECIAL_RANKS = {
     "Helix Adept",
     "Tech Adept",
     "Judiciar",
     "Lexicanum"
 }
 
-# ==================================================
-# RELIC REWARDS SYSTEM
-# ==================================================
-
-RELICS = {
-    "Hellslayer": {"gene": 25, "rites": 200},
-    "Serpent Staff of Sabazius": {"gene": 40, "rites": 250},
-    "Cessation": {"gene": 55, "rites": 300},
-    "Liber Exorcismus": {"gene": 75, "rites": 350},
-    "Expulsiaris": {"gene": 100, "rites": 500},
-    "Silent Cry": {"gene": 130, "rites": 675},
-    "Exile Plate": {"gene": 150, "rites": 825},
-    "Voidbane": {"gene": 175, "rites": 1000},
-    "Daemonarchia Claviculus": {"gene": 200, "rites": 1225},
-}
-
-CHALLENGE_TO_RANK = {
-    "Welcome to the Exorcists": "Scout",
-    "Battle Brother": "Battle Brother",
-    "Initiate Trials": "Brother-Initiate",
-    "Scholar": "Lexicanum",
-    "Emperor's Might": "Judiciar",
-    "Mechanicus": "Tech Adept",
-    "Thrice Sealed Chalice": "Helix Adept",
-    "Veteran Honours": "Veteran",
-    "Exorcist Sergeant": "Sergeant",
-    "Emperor's Blade": "Bladeguard Veteran",
-    "Enochian": "Enochian Guard",
-    "Apothecary": "Apothecary",
-    "Techmarine": "Techmarine",
-    "Banisher": "Librarian",
-    "Experienced Orison Member": "Lector",
-    "Warden of Purgatomb": "Daemonium Palatinae",
-    "Orison Leader": "Lector-Sergeant",
-    "Standard Bearer": "Ancient"
-
-}
-# ==================================================
-# DIFFICULTY VALUES
-# ==================================================
-
 OPERATION_DIFFICULTY = {
+    "Substantial": 1,
     "Ruthless": 2,
     "Lethal": 3,
     "Absolute": 4
@@ -278,16 +126,13 @@ STRATAGEM_DIFFICULTY = {
     "Hard": 5
 }
 
-# ==================================================
-# DROPDOWN CHOICES
-# ==================================================
-
 VICTORY_CHOICES = [
     app_commands.Choice(name="Yes", value="Yes"),
     app_commands.Choice(name="No", value="No"),
 ]
 
 OPERATION_DIFFICULTY_CHOICES = [
+    app_commands.Choice(name="Substantial", value="Substantial"),
     app_commands.Choice(name="Ruthless", value="Ruthless"),
     app_commands.Choice(name="Lethal", value="Lethal"),
     app_commands.Choice(name="Absolute", value="Absolute"),
@@ -319,9 +164,6 @@ MISSION_LIST = [
 
 MISSION_CHOICES = [app_commands.Choice(name=m, value=m) for m in MISSION_LIST]
 
-# ==================================================
-# DATA SYSTEM
-# ==================================================
 def safe_split(value):
     if not value or value in ("[]", "None"):
         return []
@@ -333,7 +175,7 @@ def get_user(uid: int | str):
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT rites, gene, relics, completed_challenges
+        SELECT aar_points, gene, completed_challenges
         FROM members
         WHERE user_id = ?
     """, (uid,))
@@ -343,17 +185,15 @@ def get_user(uid: int | str):
 
     if not row:
         return {
-            "rites": 0,
+            "aar_points": 0,
             "gene": 0,
-            "relics": [],
             "completed_challenges": []
         }
 
     return {
-        "rites": row[0],
+        "aar_points": row[0],
         "gene": row[1],
-        "relics": safe_split(row[2]),
-        "completed_challenges": safe_split(row[3])
+        "completed_challenges": safe_split(row[2])
     }
 
 def backup_database():
@@ -365,10 +205,7 @@ def backup_database():
     backup.close()
     conn.close()
 
-async def add_rites(member, amount, gene_bonus=0):
-    if is_double_rites_event():
-        amount *=2
-
+async def add_aar_points(member, amount, gene_bonus=0):
     uid = str(member.id)
 
     async with db_lock:
@@ -382,14 +219,14 @@ async def add_rites(member, amount, gene_bonus=0):
 
         cursor.execute("""
             UPDATE members
-            SET rites = rites + ?, gene = gene + ?
+            SET aar_points = aar_points + ?, gene = gene + ?
             WHERE user_id = ?
         """, (amount, gene_bonus, uid))
 
         conn.commit()
 
         cursor.execute("""
-            SELECT rites, gene, relics, completed_challenges
+            SELECT aar_points, gene, completed_challenges
             FROM members
             WHERE user_id = ?
         """, (uid,))
@@ -398,133 +235,99 @@ async def add_rites(member, amount, gene_bonus=0):
         conn.close()
 
     return {
-        "rites": row[0],
+        "aar_points": row[0],
         "gene": row[1],
-        "relics": row[2].split(",") if row[2] else [],
-        "completed_challenges": row[3].split(",") if row[3] else []
+        "completed_challenges": safe_split(row[2])
     }
 
-
-# ==================================================
-# CHALLENGE SYSTEM
-# ==================================================
 CHALLENGE_REQUIREMENTS = {
     "Scout": {
-        "rites": 24
+        "aar_points": 25
     },
 
     "Battle Brother": {
-        "rites": 95,
-        "days": 7
+        "aar_points": 100,
     },
-
-    "Brother-Initiate": {
-        "rites": 150,
-        "approval": True
-    },
+    
     "Lexicanum": {
-        "rites": 350,
+        "aar_points": 350,
         "approval": True
 },
     "Judiciar": {
-        "rites": 300,
+        "aar_points": 350,
         "approval": True
     },
 
     "Tech Adept": {
-        "rites": 250,
+        "aar_points": 350,
         "approval": True
     },
 
     "Helix Adept": {
-        "rites": 200,
+        "aar_points": 350,
         "approval": True
     },
     
     "Veteran": {
-        "rites": 420,
+        "aar_points": 300,
         "days": 30
     },
 
     "Bladeguard Veteran": {
-        "rites": 600,
+        "aar_points": 450,
         "approval": True
     },
 
-    "Enochian Guard": {
-        "rites": 420,
-        "approval": True,
-        "special": "Must be Veteran"
-    },
-
     "Sergeant": {
-        "rites": 750
+        "aar_points": 650
     },
 
     "Techmarine": {
-        "rites": 750,
+        "aar_points": 750,
         "approval": True
     },
 
     "Librarian": {
-        "rites": 750,
+        "aar_points": 750,
         "approval": True
     },
 
     "Apothecary": {
-        "rites": 750,
+        "aar_points": 750,
         "approval": True
     },
 
-    "Lector": {
-        "rites": 900,
-        "approval": True
-    },
-
-    "Daemonium Palatinae": {
-        "approval": True,
-        "days": 60,
-        "special": "Must be Enochian Guard"
-    },
-
-    "Lector-Sergeant": {
-        "rites": 1100,
+    "veteran-Sergeant": {
+        "aar_points": 900,
         "approval": True
     },
 
     "Ancient": {
-        "rites": 1350,
+        "aar_points": 1200,
         "approval": True
     }
 }
 
 CHALLENGES = {
-    "Scout": {"emoji": "<:11_12th_co:1499186125611208764> ", "auto": True},
-    "Battle Brother": {"emoji": "<:10th_co:1499184291878277180> ", "auto": True},
-    "Brother-Initiate": {"emoji": "<:Brother_Initiate:1506609321264414893> ", "auto": False},
-    "Lexicanum": {"emoji": "📖", "auto": False},
-    "Judiciar": {"emoji": "<:judiciar:1506715094455947305>", "auto": False},
-    "Tech Adept": {"emoji": "⚙️", "auto": False},
-    "Helix Adept": {"emoji": "⛑️", "auto": False},
-    "Veteran": {"emoji": "<:veteran:1506715250081398914> ","auto": True},
-    "Bladeguard Veteran": {"emoji": "<:1st_co:1499188889766854746> ", "auto": False},
-    "Enochian Guard": {"emoji": "<:enochian_guard:1499476859275055246> ", "auto": False},
-    "Techmarine": {"emoji": "<:techmarine:1499184650097131571> ", "auto": False},
-    "Sergeant": {"emoji": "<:Sergeant:1506742675406192730>", "auto": False}, 
-    "Librarian": {"emoji": "<:librarianj:1499184409322979500> ", "auto": False},
-    "Apothecary": {"emoji": "<:apothecary:1499184375093268611> ", "auto": False},
-    "Lector": {"emoji": "<:lector:1506715579715817693>", "auto": False},
-    "Daemonium Palatinae": {"emoji": "<:daemonium_palatinae:1506715777384841306> ", "auto": False},
-    "Lector-Sergeant": {"emoji": "<:lector_sergeant:1506715658170142923>", "auto": False},
-    "Ancient": {"emoji": "<:ancient:1506717087656317079>", "auto": False},
+    "Scout": {"auto": True},
+    "Battle Brother": {"auto": True},
+    "Lexicanum": {"auto": False},
+    "Judiciar": {"auto": False},
+    "Tech Adept": {"auto": False},
+    "Helix Adept": {"auto": False},
+    "Veteran": {"auto": True},
+    "Bladeguard Veteran": {"auto": False},
+    "Techmarine": {"auto": False},
+    "Sergeant": {"auto": False}, 
+    "Librarian": {"auto": False},
+    "Apothecary": {"auto": False},
+    "Veteran-Sergeant": {"auto": False},
+    "Ancient": {"auto": False},
 }
 CHALLENGE_CHOICES = [
     app_commands.Choice(name=name, value=name)
     for name in CHALLENGES.keys()
 ]
-# ==================================================
-# RANK LOGIC
-# ==================================================
 
 def get_rank_with_time(member, total):
     days = get_member_days(member)
@@ -534,7 +337,7 @@ def get_rank_with_time(member, total):
         potential = RANKS[threshold]
 
         # skip hidden progression ranks
-        if potential in HIDDEN_PROGRESSION_RANKS:
+        if potential in SPECIAL_RANKS:
             continue
 
         if total >= threshold:
@@ -548,7 +351,7 @@ def get_next_rank(total):
     for threshold in sorted(RANKS.keys()):
         rank = RANKS[threshold]
 
-        if rank in HIDDEN_PROGRESSION_RANKS:
+        if rank in SPECIAL_RANKS:
             continue
 
         if total < threshold:
@@ -582,9 +385,8 @@ async def assign_rank_role(member: discord.Member, role_name: str):
     await member.add_roles(role, reason="Challenge approval rank grant")
 
 async def update_rank_cached(member: discord.Member, user: dict):
-    uid = str(member.id)
 
-    new_rank = get_rank_with_time(member, user["rites"])
+    new_rank = get_rank_with_time(member, user["aar_points"])
 
     roles = {role.name: role for role in member.guild.roles}
 
@@ -604,38 +406,10 @@ async def update_rank_cached(member: discord.Member, user: dict):
         if new_rank not in user["completed_challenges"]:
             user["completed_challenges"].append(new_rank)
 
-    save_user(member.id, user)
-    # SINGLE DB WRITE ONLY
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    cursor = conn.cursor()
-
-    conn.commit()
+    
     conn.close()
     backup_database()
-    
-async def check_relics_cached(member: discord.Member, user: dict):
-    uid = str(member.id)
-
-    unlocked = []
-
-    for relic, req in RELICS.items():
-        if relic in user["relics"]:
-            continue
-
-        if user.get("gene", 0) >= req["gene"] and user.get("rites", 0) >= req["rites"]:
-            user["relics"].append(relic)
-            unlocked.append(relic)
-
-    if unlocked:
-        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-        cursor = conn.cursor()
-
-        conn.commit()
-        conn.close()
-        save_user(member.id, user)
-        backup_database()
-        
-    return unlocked
 
 def safe_join(value):
     if not value:
@@ -650,12 +424,11 @@ def save_user(user_id, user):
 
     cursor.execute("""
         UPDATE members
-        SET rites = ?, gene = ?, relics = ?, completed_challenges = ?
+        SET aar_points = ?, gene = ?, completed_challenges = ?
         WHERE user_id = ?
     """, (
-        user["rites"],
+        user["aar_points"],
         user["gene"],
-        safe_join(user["relics"]),
         safe_join(user["completed_challenges"]),
         str(user_id)
     ))
@@ -670,7 +443,6 @@ async def safe_defer(interaction):
         
 def build_members(*members):
     return [m for m in members if m]
-
 
 async def send_gallery(interaction, embed, screenshots, content=None):
     if not screenshots:
@@ -694,61 +466,16 @@ async def send_gallery(interaction, embed, screenshots, content=None):
 
     grid_image.close()
 
-async def process_progress(member, rites, gene_bonus):
-    user = await add_rites(member, rites, gene_bonus)
+async def process_progress(member, points, gene_bonus):
+    user = await add_aar_points(member, points, gene_bonus)
 
-    new_relics = await check_relics_cached(member=member, user=user)
     await update_rank_cached(member=member, user=user)
 
-    user["new_relics"] = new_relics
-
     save_user(member.id, user)
-    
     return user
 
-async def announce_relics(interaction, member, user):
-    for r in user.get("new_relics", []):
-        await interaction.channel.send(
-            f"{member.mention} has unlocked relic: {r} "
-        )
-
-def announce_double_rites(bot):
-    channel = bot.get_channel(GREAT_HALL_CHANNEL_ID)
-    if not channel:
-        return
-
-    if is_double_rites_event():
-        # prevent spam on reconnects
-        if getattr(bot, "_double_rites_announced", False):
-            return
-
-        bot._double_rites_announced = True
-
-        return channel.send(
-            "**+++ 𝔇𝔬𝔲𝔟𝔩𝔢 XP 𝔄𝔠𝔱𝔦𝔳𝔢 +++**\n\n"
-            "Report to your battle stations armed and ready!\n"
-            "Now is the time to commit great deeds in the name of the Emperor!\n\n"
-            "Event takes place between 7th-10th and 20th-23rd each month!"
-        )
-        
-def get_next_relic(user):
-    rites = user.get("rites", 0)
-    gene = user.get("gene", 0)
-
-    for relic, req in sorted(RELICS.items(), key=lambda x: x[1]["rites"]):
-        if relic in user.get("relics", []):
-            continue
-
-        remaining = req["rites"] - rites
-        if remaining < 0:
-            remaining = 0
-
-        return relic, req["rites"], remaining
-
-    return None, None, None
-
-@bot.tree.command(name="edit_rites", description="Add or subtract rites from a member")
-async def edit_rites(
+@bot.tree.command(name="edit_aar_points", description="Add or subtract aar_points from a member")
+async def edit_aar_points(
     interaction: discord.Interaction,
     member: discord.Member,
     amount: int,
@@ -775,11 +502,10 @@ async def edit_rites(
         INSERT OR IGNORE INTO members (user_id)
         VALUES (?)
     """, (str(member.id),))
-
-    # Apply change
+    
     cursor.execute("""
         UPDATE members
-        SET rites = rites + ?
+        SET aar_points = aar_points + ?
         WHERE user_id = ?
     """, (final_amount, str(member.id)))
 
@@ -792,14 +518,14 @@ async def edit_rites(
     await update_rank_cached(member, user)
 
     embed = discord.Embed(
-        title="Rites Edited",
+        title="AAR points Edited",
         color=discord.Color.orange()
     )
 
     embed.add_field(name="Member", value=member.mention, inline=False)
     embed.add_field(name="Mode", value=mode, inline=False)
     embed.add_field(name="Changed By", value=final_amount, inline=False)
-    embed.add_field(name="New Total Rites", value=user["rites"], inline=False)
+    embed.add_field(name="New Total Points", value=user["aar_points"], inline=False)
     embed.add_field(name="Gene Seeds", value=user["gene"], inline=False)
     embed.add_field(name="Reason", value=reason, inline=False)
 
@@ -812,34 +538,24 @@ async def player_card(interaction: discord.Interaction, member: discord.Member =
     member = member or interaction.user
     user = get_user(member.id)
 
-    rites = user["rites"]
+    aar_points = user["aar_points"]
     gene = user["gene"]
     days = get_member_days(member)
     completed = user.get("completed_challenges", [])
 
     approval_rank = None
 
-    for r in HIDDEN_PROGRESSION_RANKS:
+    for r in SPECIAL_RANKS:
         if r in completed:
             approval_rank = r
             break
 
-    rank = approval_rank if approval_rank else get_rank_with_time(member, rites)
+    rank = approval_rank if approval_rank else get_rank_with_time(member, aar_points)
     
-    badges = "".join(
-        f"{CHALLENGES[name]['emoji']} "
-        for name in CHALLENGES
-        if name in completed
-    ).strip()
-
-    relics = user.get("relics", [])
-    relic_text = "\n".join(f"• {r}" for r in relics) if relics else "None recorded"
-    relic_section = f"Relics:\n{relic_text}"
-
-    next_rank, next_req = get_next_rank(rites)
+    next_rank, next_req = get_next_rank(aar_points)
 
     if next_rank:
-        progress_bar_text = progress_bar(rites, next_req)
+        progress_bar_text = progress_bar(aar_points, next_req)
         progress_section = (
             f"Next Rank: **{next_rank}**\n"
             f"{progress_bar_text}"
@@ -856,16 +572,9 @@ async def player_card(interaction: discord.Interaction, member: discord.Member =
     "\n"
     f"⚔ **++COMBAT LOG++** ⚔\n"
     f"◆━━━━━━━━━━━━━━━━━━━━━━━━━━━◆\n"
-    f"**Service Rites Earned:** {rites}\n"
+    f"**AAR Points Earned:** {aar_points}\n"
     f"**Gene-Seeds Collected:** {gene}\n"
     "\n"
-    f"✠ **++MARKS OF VALOR++** ✠\n"
-    f"◆━━━━━━━━━━━━━━━━━━━━━━━━━━━◆\n"
-    f"{badges if badges else '*No honors recorded in the Librarium*'}\n"
-    "\n"
-    f"🕯 **++SANCTIFIED RELICS++** 🕯\n"
-    f"◆━━━━━━━━━━━━━━━━━━━━━━━━━━━◆\n"
-    f"{relic_text if relics else '*None entrusted by the Chapter*'}\n"
 )
 
     embed = discord.Embed(
@@ -873,7 +582,6 @@ async def player_card(interaction: discord.Interaction, member: discord.Member =
     description=dossier,
     color=discord.Color.dark_red()
 )
-
 
     embed.set_thumbnail(url=member.display_avatar.url)
     embed.add_field(
@@ -885,7 +593,6 @@ async def player_card(interaction: discord.Interaction, member: discord.Member =
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="operation_report")
-@battle_reports_only()
 @app_commands.choices(
     mission=MISSION_CHOICES,
     difficulty=OPERATION_DIFFICULTY_CHOICES,
@@ -909,44 +616,29 @@ async def operation_report(
     
     base = OPERATION_DIFFICULTY[difficulty.value]
     gene_bonus = 1 if gene_seed.value == "Found" else 0
-    total_rites = (base + gene_bonus) 
+    total_aar_points = (base + gene_bonus) 
 
     members = build_members(member1, member2, member3)
     lines = []
 
     for m in members:
         user = get_user(m.id)
-        next_relic, relic_req, relic_remaining = get_next_relic(user)
-        user = await process_progress(m, total_rites, gene_bonus)
+        user = await process_progress(m, total_aar_points, gene_bonus)
 
-        rites = user["rites"]
+        aar_points = user["aar_points"]
         gene = user["gene"]
 
-        await announce_relics(interaction, m, user)
-
-        if next_relic:
-            relic_data = RELICS[next_relic]
-
-            relic_text = (
-                f"Next Relic: {next_relic}\n"
-                f"Gene Seed: {gene}/{relic_data['gene']}\n\n"
-            )
-        else:
-            relic_text = (
-                "All Relics Unlocked\n\n"
-            )
 
         lines.append(
             f"{m.mention}\n"
-            f"{relic_text}"
-            f"{get_progress_text(rites)}"
+            f"{get_progress_text(aar_points)}"
         )
 
     embed = discord.Embed(title="++𝕺𝖕𝖊𝖗𝖆𝖙𝖎𝖔𝖓 𝕽𝖊𝖕𝖔𝖗𝖙++", color=discord.Color.red())
     embed.add_field(name="Mission", value=mission.value, inline=False)
-    embed.add_field(name="Difficulty", value=f"{difficulty.value} (+{base} Rites)", inline=False)
+    embed.add_field(name="Difficulty", value=f"{difficulty.value} (+{base} Points)", inline=False)
 
-    gene_text = "Found (+1 Rites)" if gene_seed.value == "Found" else "None"
+    gene_text = "Found (+1 Points)" if gene_seed.value == "Found" else "None"
     embed.add_field(name="Gene Seed", value=gene_text, inline=False)
     embed.add_field(name="Members", value="\n\n".join(lines), inline=False)
 
@@ -954,12 +646,9 @@ async def operation_report(
     screenshots = [s for s in screenshots if s]
 
     await send_gallery(interaction, embed, screenshots,
-        "The daemons are banished! Your willpower remains strong as steel. "
-        "Let us ensure your tools are equally resolute."
     )
 
 @bot.tree.command(name="stratagem_report")
-@battle_reports_only()
 @app_commands.choices(
     mission=MISSION_CHOICES,
     difficulty=STRATAGEM_DIFFICULTY_CHOICES,
@@ -983,9 +672,9 @@ async def stratagem_report(
 
     base = STRATAGEM_DIFFICULTY[difficulty.value]
     gene_bonus = 1 if gene_seed.value == "Found" else 0
-    total_rites = (base + gene_bonus) 
+    total_aar_points = (base + gene_bonus) 
 
-    difficulty_text = f"{difficulty.value} (+{base} Rites)"
+    difficulty_text = f"{difficulty.value} (+{base} Points)"
 
     members = build_members(member1, member2, member3)
 
@@ -993,35 +682,20 @@ async def stratagem_report(
 
     for m in members:
         user = get_user(m.id)
-        next_relic, relic_req, relic_remaining = get_next_relic(user)
-        user = await process_progress(m, total_rites, gene_bonus)
-        rites = user["rites"]
+        user = await process_progress(m, total_aar_points, gene_bonus)
+        aar_points = user["aar_points"]
         gene = user["gene"]
-
-        await announce_relics(interaction, m, user)
-
-        next_relic, relic_req, relic_remaining = get_next_relic(user)
-
-        if next_relic:
-            relic_data = RELICS[next_relic]
-            relic_text = (
-                f"Next Relic: {next_relic}\n"
-                f"Gene Seeds: {gene}/{relic_data['gene']}\n\n"
-            )
-        else:
-            relic_text = "All Relics Unlocked\n\n"
 
         lines.append(
             f"{m.mention}\n"
-            f"{relic_text}"
-            f"{get_progress_text(rites)}"
+            f"{get_progress_text(aar_points)}"
         )
 
     embed = discord.Embed(title="++𝕾𝖙𝖗𝖆𝖙𝖆𝖌𝖊𝖒 𝕽𝖊𝖕𝖔𝖗𝖙++", color=discord.Color.gold())
     embed.add_field(name="Mission", value=mission.value, inline=False)
     embed.add_field(name="Difficulty", value=difficulty_text, inline=False)
 
-    gene_text = "Found (+1 Rites)" if gene_seed.value == "Found" else "None"
+    gene_text = "Found (+1 Points)" if gene_seed.value == "Found" else "None"
     embed.add_field(name="Gene Seed", value=gene_text, inline=False)
 
     embed.add_field(name="Members", value="\n\n".join(lines), inline=False)
@@ -1030,13 +704,9 @@ async def stratagem_report(
     screenshots = [s for s in screenshots if s]
 
     await send_gallery(interaction, embed, screenshots,
-        "...binaric whirring..."
-        "[EXORCISM] protocols completed. The warp-taint is removed. "
-        "Your wargear is sanctified."
     )
 
 @bot.tree.command(name="siege_report")
-@battle_reports_only()
 @app_commands.choices(waves=WAVE_CHOICES)
 async def siege_report(interaction: discord.Interaction,
     waves: app_commands.Choice[int],
@@ -1051,15 +721,13 @@ async def siege_report(interaction: discord.Interaction,
     await safe_defer(interaction)
     
     gene_bonus = 0
-    total_rites = (waves.value // 5) * 2
+    total_aar_points = (waves.value // 5) * 2
     members = build_members(member1, member2, member3)
     lines = []
 
     for m in members:
-        user = await process_progress(m, total_rites, gene_bonus)
-        total = user["rites"]
-
-        await announce_relics(interaction, m, user)
+        user = await process_progress(m, total_aar_points, gene_bonus)
+        total = user["aar_points"]
         
         lines.append(f"{m.mention}\nTotal: {total}\n{get_progress_text(total)}")
 
@@ -1071,14 +739,9 @@ async def siege_report(interaction: discord.Interaction,
     screenshots = [s for s in screenshots if s]
 
     await send_gallery(interaction, embed, screenshots,
-        "Mission efficiency: (97%). "
-        "Daemonic presence: (0%). "
-        "A satisfactory outcome, my Lord. "
-        "Your flesh has proved to be a durable vessel."
     )
 
 @bot.tree.command(name="pvp_report")
-@battle_reports_only()
 @app_commands.choices(victory=VICTORY_CHOICES)
 @app_commands.describe(
     mode="PvP mode (e.g. Annihilation, Sieze Ground, C&C)"
@@ -1097,9 +760,9 @@ async def pvp_report(
 ):
     await safe_defer(interaction)
     
-    rites = 3 if victory.value == "Yes" else 0
+    aar_points = 3 if victory.value == "Yes" else 0
     gene_bonus = 0
-    total_rites = rites
+    total_aar_points = aar_points
     members = build_members(member1, member2, member3)
 
     embed = discord.Embed(title="++𝕻𝖛𝖕 𝕽𝖊𝖕𝖔𝖗𝖙++", color=discord.Color.green())
@@ -1107,15 +770,13 @@ async def pvp_report(
     embed.add_field(name="Victory", value=victory.value, inline=False)
 
     for m in members:
-        user = await process_progress(m, total_rites, gene_bonus)
+        user = await process_progress(m, total_aar_points, gene_bonus)
 
-        total = user["rites"]
-
-        await announce_relics(interaction, m, user)
+        total = user["aar_points"]
         
         embed.add_field(
             name=m.display_name,
-            value=f"+{rites} Rites\nTotal: {total}\n{get_progress_text(total)}",
+            value=f"+{aar_points} Points\nTotal: {total}\n{get_progress_text(total)}",
             inline=False
         )
 
@@ -1123,7 +784,6 @@ async def pvp_report(
     screenshots = [s for s in screenshots if s]
 
     await send_gallery(interaction, embed, screenshots,
-        "... [Combat efficiency confirmed. Daemonium containment holding [IN PROGRESS]. Data-transfer complete.]"
     )
 
 @bot.event
@@ -1145,7 +805,6 @@ async def on_ready():
         await bot.tree.sync()
         bot.synced = True
         print("Slash commands synced.")
-        await announce_double_rites(bot)
     except Exception as e:
         print(f"Sync failed: {e}")
 
