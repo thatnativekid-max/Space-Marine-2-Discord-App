@@ -786,6 +786,57 @@ async def pvp_report(
     await send_gallery(interaction, embed, screenshots,
     )
 
+@bot.tree.command(
+    name="challenge_progress",
+    description="View challenge progression for a member"
+)
+async def challenge_progress(interaction: discord.Interaction, member: discord.Member = None):
+
+    member = member or interaction.user
+
+    await interaction.response.defer()
+
+    user = get_user(member.id)
+    aar_points = user["aar_points"]
+    completed = user.get("completed_challenges", [])
+    days = get_member_days(member)
+
+    NAME_WIDTH = 28
+
+    dossier = "```ini\n"
+    dossier += f"[CHALLENGE DATASLATE - {member.display_name}]\n\n"
+
+    for challenge_name, req in CHALLENGE_REQUIREMENTS.items():
+
+        if challenge_name in completed:
+            status = "COMPLETED"
+        else:
+            status = "PENDING"
+
+        title = challenge_name[:NAME_WIDTH]
+        header = title.ljust(NAME_WIDTH) + status
+        dossier += header + "\n"
+
+        if "rites" in req:
+            dossier += f" Points {aar_points}/{req['aar_points']}\n"
+
+        if "days" in req:
+            dossier += f" Days {days}/{req['days']}\n"
+
+        if req.get("approval"):
+            dossier += " Officer Approval Required\n"
+
+        dossier += "\n"
+
+    embed = discord.Embed(
+        title="Challenge Progress",
+        description=dossier,
+        color=discord.Color.dark_gold()
+    )
+
+    await interaction.followup.send(embed=embed)
+
+
 @bot.event
 async def on_ready():
     global db_lock, event_lock
