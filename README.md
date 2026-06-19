@@ -16,7 +16,7 @@ A Discord automatic progression system.
 - Easily Customizable
 - Supported by all background worker websites
 - Perfect starting point for the adept coder!
-- Works as a a standalone app
+- Works as a standalone app
 
 ## Setup
 
