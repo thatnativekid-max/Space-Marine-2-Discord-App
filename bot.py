@@ -817,7 +817,7 @@ async def challenge_progress(interaction: discord.Interaction, member: discord.M
         header = title.ljust(NAME_WIDTH) + status
         dossier += header + "\n"
 
-        if "rites" in req:
+        if "aar_points" in req:
             dossier += f" Points {aar_points}/{req['aar_points']}\n"
 
         if "days" in req:
