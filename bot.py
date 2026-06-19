@@ -123,7 +123,7 @@ RANKS = {
     900: "Veteran-Sergeant",
     1200: "Ancient",
     1500: "Lieutenant",
-    9999: "Captain" 
+    9999: "Captain", 
     10000: "Chapter Master"
 }
 
@@ -136,7 +136,6 @@ SPECIAL_RANKS = {
     "Techmarine",
     "Librarian",
     "Chaplain",
-    "Captain"
     
 }
 
@@ -338,12 +337,12 @@ CHALLENGE_REQUIREMENTS = {
         "approval": True
     }
 
-    ["Captain"]: = {
-    "approval": True
+    "Captain": {
+        "approval": True
     }
 
-    ["Chapter Master"]: = {
-    "approval": True
+    "Chapter Master": {
+        "approval": True
     }
 }
 
@@ -374,21 +373,21 @@ CHALLENGE_CHOICES = [
 
 def get_rank_with_time(member, total):
     days = get_member_days(member)
-    rank = "Aspirant"
+    valid_rank = "Aspirant"
 
     for threshold in sorted(RANKS.keys()):
         potential = RANKS[threshold]
 
         if potential in SPECIAL_RANKS:
             continue
-        if potential == ["Captain", "Chapter Master"]:
-            continue
-        if total >= threshold:
-            if potential == "Veteran" and days < 30:
-                continue
-            rank = potential
 
-    return rank
+        if potential == "Veteran" and days < 30:
+            continue
+
+        if total >= threshold:
+            valid_rank = potential
+
+    return valid_rank
 
 def get_next_rank(total):
     for threshold in sorted(RANKS.keys()):
@@ -431,7 +430,7 @@ async def update_rank_cached(member: discord.Member, user: dict):
 
     new_rank = get_rank_with_time(member, user["aar_points"])
 
-    if new rank == "Captain":
+    if new_rank == "Captain":
         return
 
     roles = {role.name: role for role in member.guild.roles}
@@ -544,27 +543,8 @@ async def edit_aar_points(
 
     final_amount = amount if mode == "add" else -amount
 
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT OR IGNORE INTO members (user_id)
-        VALUES (?)
-    """, (str(member.id),))
-    
-    cursor.execute("""
-        UPDATE members
-        SET aar_points = aar_points + ?
-        WHERE user_id = ?
-    """, (final_amount, str(member.id)))
-
-    conn.commit()
-    conn.close()
-    backup_database()
-
+    await process_progress(member, final_amount, 0)
     user = get_user(member.id)
-
-    await update_rank_cached(member, user)
 
     embed = discord.Embed(
         title="AAR points Edited",
