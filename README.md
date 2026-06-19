@@ -25,10 +25,10 @@ A Discord automatic progression system.
 /edit_aar_points (add or subtract points)
 /player_card (display player card)
 /approve_challenge (approve rank challenge)
-/operation_report
-/stratagem _report
-/siege_report
-/pvp_report
+/operation_report (operation embed display)
+/stratagem _report (stratagem embed display)
+/siege_report (siege embed display)
+/pvp_report (pvp embed display)
 
 ## Credits
 Credits of this app goes to Chapter Master Ozu of the Exorcist 40k discord.
