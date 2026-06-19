@@ -4,6 +4,8 @@ A Discord automatic progression system.
 
 ## Features
 - AAR points system
+- Playercards
+- Add and Subtract points as needed
 - Rank progression system
 - Operation / Stratagem / Siege / PvP reports
 - Gene seed tracking
@@ -13,6 +15,8 @@ A Discord automatic progression system.
 - User friendly Python format
 - Easily Customizable
 - Supported by all background worker websites
+- Perfect starting point for the adept coder!
+- Works as a a standalone app
 
 ## Setup
 
@@ -24,6 +28,7 @@ A Discord automatic progression system.
 ## Requirements
 - Python 3.10+
 - discord.py 2.x
+- Every rank in the system must reflect a role in your server.
 
 ## Command List
 /edit_aar_points (add or subtract points)
