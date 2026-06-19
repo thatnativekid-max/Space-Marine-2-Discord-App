@@ -9,6 +9,8 @@ A Discord automatic progression system.
 - Gene seed tracking
 - Challenge system
 - embed grid reporting system
+- SQLite Database
+- User friendly Python format
 
 ## Setup
 
