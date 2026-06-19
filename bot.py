@@ -746,9 +746,7 @@ def get_next_relic(user):
         return relic, req["rites"], remaining
 
     return None, None, None
-# ==================================================
-# ADMIN COMMAND
-# ==================================================
+
 @bot.tree.command(name="edit_rites", description="Add or subtract rites from a member")
 async def edit_rites(
     interaction: discord.Interaction,
@@ -758,22 +756,21 @@ async def edit_rites(
     reason: str = "None"
 ):
     if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        return await interaction.response.send_message("No permission.", ephemeral=True)
 
     await safe_defer(interaction)
 
     if mode not in ["add", "subtract"]:
-        return await interaction.followup.send("❌ Mode must be `add` or `subtract`.")
+        return await interaction.followup.send("Mode must be `add` or `subtract`.")
 
     if amount <= 0:
-        return await interaction.followup.send("❌ Amount must be greater than 0.")
+        return await interaction.followup.send("Amount must be greater than 0.")
 
     final_amount = amount if mode == "add" else -amount
 
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Ensure user exists
     cursor.execute("""
         INSERT OR IGNORE INTO members (user_id)
         VALUES (?)
@@ -808,45 +805,6 @@ async def edit_rites(
 
     await interaction.followup.send(embed=embed)
 
-
-@bot.tree.command(name="approve_challenge")
-@app_commands.choices(
-    challenge=[
-        app_commands.Choice(name=name, value=name)
-        for name in CHALLENGES.keys()
-    ]
-)
-async def approve_challenge(interaction: discord.Interaction, member: discord.Member, challenge: app_commands.Choice[str]):
-
-    if not interaction.user.guild_permissions.manage_roles:
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-
-    await interaction.response.defer()
-
-    challenge_name = challenge.value
-    user = get_user(member.id)
-
-    if challenge_name in user["completed_challenges"]:
-        return await interaction.followup.send("Already completed.")
-
-    user["completed_challenges"].append(challenge_name)
-    user["completed_challenges"] = list(dict.fromkeys(user["completed_challenges"]))
-
-    role_name = CHALLENGE_TO_RANK.get(challenge_name)
-
-    if role_name:
-        await assign_rank_role(member, role_name)
-
-    save_user(member.id, user)
-
-    await interaction.followup.send(
-        f"✅ {member.mention} has completed **{challenge_name}** and been approved."
-    )
-
-# ==================================================
-# PLAYER CARD
-# ==================================================
-
 @bot.tree.command(name="player_card")
 async def player_card(interaction: discord.Interaction, member: discord.Member = None):
     await interaction.response.defer()
@@ -867,19 +825,13 @@ async def player_card(interaction: discord.Interaction, member: discord.Member =
             break
 
     rank = approval_rank if approval_rank else get_rank_with_time(member, rites)
-
-    # -------------------------
-    # BADGES
-    # -------------------------
+    
     badges = "".join(
         f"{CHALLENGES[name]['emoji']} "
         for name in CHALLENGES
         if name in completed
     ).strip()
 
-    # -------------------------
-    # RELICS
-    # -------------------------
     relics = user.get("relics", [])
     relic_text = "\n".join(f"• {r}" for r in relics) if relics else "None recorded"
     relic_section = f"Relics:\n{relic_text}"
@@ -897,22 +849,22 @@ async def player_card(interaction: discord.Interaction, member: discord.Member =
 
     dossier = (
     f"☠ **++SERVICE RECORD++** ☠\n"
-    f"⫘⫘⫘⫘⫘⫘⫘⫘⫘\n"
+    f"◆━━━━━━━━━━━━━━━━━━━━━━━━━━━◆\n"
     f"**Designation:** {member.display_name}\n"
     f"**Rank:** ✠ *{rank.upper()}* ✠\n"
     f"**Years in Service:** {days} years\n"
     "\n"
     f"⚔ **++COMBAT LOG++** ⚔\n"
-    f"⫘⫘⫘⫘⫘⫘⫘⫘⫘\n"
+    f"◆━━━━━━━━━━━━━━━━━━━━━━━━━━━◆\n"
     f"**Service Rites Earned:** {rites}\n"
     f"**Gene-Seeds Collected:** {gene}\n"
     "\n"
     f"✠ **++MARKS OF VALOR++** ✠\n"
-    f"⫘⫘⫘⫘⫘⫘⫘⫘⫘\n"
+    f"◆━━━━━━━━━━━━━━━━━━━━━━━━━━━◆\n"
     f"{badges if badges else '*No honors recorded in the Librarium*'}\n"
     "\n"
     f"🕯 **++SANCTIFIED RELICS++** 🕯\n"
-    f"⫘⫘⫘⫘⫘⫘⫘⫘⫘\n"
+    f"◆━━━━━━━━━━━━━━━━━━━━━━━━━━━◆\n"
     f"{relic_text if relics else '*None entrusted by the Chapter*'}\n"
 )
 
@@ -924,10 +876,6 @@ async def player_card(interaction: discord.Interaction, member: discord.Member =
 
 
     embed.set_thumbnail(url=member.display_avatar.url)
-    
-    # -------------------------
-    # PROGRESS (INSIDE SAME EMBED)
-    # -------------------------
     embed.add_field(
         name="...ASCENSION THRESHOLD...",
         value=progress_section,
@@ -936,9 +884,6 @@ async def player_card(interaction: discord.Interaction, member: discord.Member =
 
     await interaction.followup.send(embed=embed)
 
-# ==================================================
-# OPERATION REPORT
-# ==================================================
 @bot.tree.command(name="operation_report")
 @battle_reports_only()
 @app_commands.choices(
@@ -1012,10 +957,6 @@ async def operation_report(
         "The daemons are banished! Your willpower remains strong as steel. "
         "Let us ensure your tools are equally resolute."
     )
-
-# ==================================================
-# STRATAGEM REPORT
-# ==================================================
 
 @bot.tree.command(name="stratagem_report")
 @battle_reports_only()
@@ -1093,9 +1034,6 @@ async def stratagem_report(
         "[EXORCISM] protocols completed. The warp-taint is removed. "
         "Your wargear is sanctified."
     )
-# ==================================================
-# SIEGE REPORT
-# ==================================================
 
 @bot.tree.command(name="siege_report")
 @battle_reports_only()
@@ -1138,10 +1076,6 @@ async def siege_report(interaction: discord.Interaction,
         "A satisfactory outcome, my Lord. "
         "Your flesh has proved to be a durable vessel."
     )
-
-# ==================================================
-# PVP REPORT
-# ==================================================
 
 @bot.tree.command(name="pvp_report")
 @battle_reports_only()
@@ -1192,210 +1126,6 @@ async def pvp_report(
         "... [Combat efficiency confirmed. Daemonium containment holding [IN PROGRESS]. Data-transfer complete.]"
     )
 
-# ==================================================
-# EXORSUITS REPORT
-# ==================================================
-
-@bot.tree.command(name="exorsuits", description="Log an Exorsuits match result")
-@battle_reports_only()
-@app_commands.choices(victory=VICTORY_CHOICES)
-async def exorsuits(
-    interaction: discord.Interaction,
-    victory: app_commands.Choice[str],
-    member1: discord.Member,
-    screenshot1: discord.Attachment,
-    screenshot2: discord.Attachment,
-    member2: discord.Member = None,
-    member3: discord.Member = None,
-    member4: discord.Member = None,
-    screenshot3: discord.Attachment = None,
-    screenshot4: discord.Attachment = None
-):
-    await safe_defer(interaction)
-
-    rites = 2 if victory.value == "Yes" else 0
-    gene_bonus = 0
-    total_rites = rites
-    members = [m for m in [member1, member2, member3, member4] if m]
-
-    embed = discord.Embed(title="++𝕰𝖝𝖔𝖗𝖘𝖚𝖎𝖙𝖘 𝕽𝖊𝖕𝖔𝖗𝖙++", color=discord.Color.teal())
-    embed.add_field(name="Victory", value=victory.value, inline=False)
-
-    for m in members:
-        user = await process_progress(m, total_rites, gene_bonus)
-
-        total = user["rites"]
-
-        await announce_relics(interaction, m, user)
-        
-        embed.add_field(
-            name=m.display_name,
-            value=f"+{rites} Rites\nTotal: {total}\n{get_progress_text(total)}",
-            inline=False
-        )
-
-    screenshots = [screenshot1, screenshot2, screenshot3, screenshot4]
-    screenshots = [s for s in screenshots if s]
-
-    await send_gallery(interaction, embed, screenshots,
-        "...Divine Liberty has been dispersed. Amplifing orbital combat systems..."
-    )
-
-# ==================================================
-# READY
-# ==================================================
-@bot.tree.command(name="event_request", description="Submit an event idea for approval")
-@events_channel_only()
-@app_commands.describe(details="Describe your event idea in detail")
-async def event_request(interaction: discord.Interaction, details: str):
-
-    embed = discord.Embed(
-        title="++𝕰𝖛𝖊𝖓𝖙 𝕽𝖊𝖖𝖚𝖊𝖘𝖙++",
-        description=details,
-        color=discord.Color.orange(),
-        timestamp=datetime.now(timezone.utc)
-    )
-
-    embed.add_field(name="Requested By", value=interaction.user.mention, inline=False)
-
-    await interaction.response.send_message(
-        "Your event request has been submitted for review.",
-        ephemeral=True
-    )
-
-    await interaction.channel.send(
-        embed=embed,
-        view=EventApprovalView()
-    )
-
-@bot.tree.command(name="relic_progress", description="View relic unlock progression for a member")
-@techsorcist_records_only()
-async def relic_progress(interaction: discord.Interaction, member: discord.Member = None):
-
-    member = member or interaction.user
-
-    await interaction.response.defer()
-
-    user = get_user(member.id)
-
-    rites = user["rites"]
-    gene = user["gene"]
-    unlocked = user.get("relics", [])
-
-    NAME_WIDTH = 34
-
-    dossier = "```ini\n"
-    dossier += f"[RELIC DATASLATE - {member.display_name}]\n\n"
-
-    for relic, req in RELICS.items():
-
-        if relic in unlocked:
-            status = "UNLOCKED"
-        else:
-            status = "LOCKED"
-
-        title = relic[:NAME_WIDTH]
-        header = title.ljust(NAME_WIDTH) + status
-
-        dossier += header + "\n"
-
-        dossier += f" Rites {rites}/{req['rites']}\n"
-        dossier += f" Gene {gene}/{req['gene']}\n"
-
-        # Remaining requirements
-        remaining_rites = max(0, req['rites'] - rites)
-        remaining_gene = max(0, req['gene'] - gene)
-
-        if status == "LOCKED":
-            dossier += (
-                f" Remaining {remaining_rites} Rites | "
-                f"{remaining_gene} Gene\n"
-            )
-
-        dossier += "\n"
-
-    dossier += "[RELIC SANCTIFICATION TRACKING]\n"
-    dossier += "```"
-
-    embed = discord.Embed(
-        title="Relic Progress",
-        description=dossier,
-        color=discord.Color.dark_purple()
-    )
-
-    await interaction.followup.send(embed=embed)
-    
-@bot.tree.command(
-    name="challenge_progress",
-    description="View challenge progression for a member"
-)
-@techsorcist_records_only()
-async def challenge_progress(interaction: discord.Interaction, member: discord.Member = None):
-
-    member = member or interaction.user
-
-    await interaction.response.defer()
-
-    user = get_user(member.id)
-    rites = user["rites"]
-    completed = user.get("completed_challenges", [])
-    days = get_member_days(member)
-
-    NAME_WIDTH = 28
-
-    dossier = "```ini\n"
-    dossier += f"[CHALLENGE DATASLATE - {member.display_name}]\n\n"
-
-    for challenge_name, req in CHALLENGE_REQUIREMENTS.items():
-
-        # -------------------------
-        # STATUS
-        # -------------------------
-        if challenge_name in completed:
-            status = "COMPLETED"
-        else:
-            status = "PENDING"
-
-        # Dependency locks
-        if challenge_name == "Enochian Guard" and "Veteran" not in completed:
-            status = "LOCKED \u200b\n(REQ VETERAN)"
-
-        if challenge_name == "Daemonium Palatinae" and "Enochian Guard" not in completed:
-            status = "LOCKED \u200b\n(REQ ENOCHIAN)"
-
-        # -------------------------
-        # HEADER LINE (ALIGNED)
-        # -------------------------
-        title = challenge_name[:NAME_WIDTH]
-        header = title.ljust(NAME_WIDTH) + status
-        dossier += header + "\n"
-
-        # -------------------------
-        # DETAILS
-        # -------------------------
-        if "rites" in req:
-            dossier += f" Rites {rites}/{req['rites']}\n"
-
-        if "days" in req:
-            dossier += f" Days {days}/{req['days']}\n"
-
-        if req.get("approval"):
-            dossier += " Officer Approval Required\n"
-
-        dossier += "\n"
-
-    # Footer inside same block
-    dossier += "[CHECK #rank-and-heraldry]\n"
-    dossier += "```"
-
-    embed = discord.Embed(
-        title="Challenge Progress",
-        description=dossier,
-        color=discord.Color.dark_gold()
-    )
-
-    await interaction.followup.send(embed=embed)
-
 @bot.event
 async def on_ready():
     global db_lock, event_lock
@@ -1419,20 +1149,5 @@ async def on_ready():
     except Exception as e:
         print(f"Sync failed: {e}")
 
-
-@bot.event
-async def on_member_join(member):
-    try:
-        channel = bot.get_channel(1393664184771936279)
-
-        await channel.send(
-            f"... **INITIATE DETECTED** ...\n\n"
-            f"Welcome to Banish, home of the Exorcists!\n"
-            f"I am the Techsorcist, keeper of your records.\n\n"
-            f"Proceed to the Halls of Tempering to begin your trials, {member.mention}."
-        )
-
-    except Exception as e:
-        print(f"on_member_join failed: {e}")
 
 bot.run(TOKEN)
