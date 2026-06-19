@@ -27,7 +27,7 @@ A Discord automatic progression system.
 /approve_challenge (approve rank challenge)
 /operation_report (operation embed display)
 /stratagem _report (stratagem embed display)
-/siege_report (siege embed display)
+/siege_report (siege mode embed display)
 /pvp_report (pvp embed display)
 
 ## Credits
