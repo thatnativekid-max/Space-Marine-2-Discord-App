@@ -14,7 +14,8 @@ A Discord automatic progression system.
 
 1. Install dependencies
 2. Set environment variable
-3. Run
+3. Change DB_File to: database.db (currently set for Render)
+4. Run
 
 ## Requirements
 - Python 3.10+
