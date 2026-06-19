@@ -11,7 +11,8 @@ A Discord automatic progression system.
 - embed grid reporting system
 - SQLite Database
 - User friendly Python format
-- Easily Customizable 
+- Easily Customizable
+- Supported by all background worker websites
 
 ## Setup
 
