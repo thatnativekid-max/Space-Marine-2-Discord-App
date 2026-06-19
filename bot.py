@@ -22,6 +22,24 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+def initialize_database():
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS members (
+            user_id TEXT PRIMARY KEY,
+            aar_points INTEGER NOT NULL DEFAULT 0,
+            gene INTEGER NOT NULL DEFAULT 0,
+            completed_challenges TEXT NOT NULL DEFAULT ''
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+    print("Database initialized.")
+
 def get_member_days(member: discord.Member):
     if not member.joined_at:
         return 0
@@ -104,14 +122,22 @@ RANKS = {
     650: "Sergeant",
     900: "Veteran-Sergeant",
     1200: "Ancient",
-    1500: "Lieutenant"
+    1500: "Lieutenant",
+    9999: "Captain" 
+    10000: "Chapter Master"
 }
 
 SPECIAL_RANKS = {
     "Helix Adept",
     "Tech Adept",
     "Judiciar",
-    "Lexicanum"
+    "Lexicanum",
+    "Apothecary",
+    "Techmarine",
+    "Librarian",
+    "Chaplain",
+    "Captain"
+    
 }
 
 OPERATION_DIFFICULTY = {
@@ -297,7 +323,12 @@ CHALLENGE_REQUIREMENTS = {
         "approval": True
     },
 
-    "veteran-Sergeant": {
+    "Chaplain": {
+        "aar_points": 750,
+        "approval": True
+    },
+
+    "Veteran-Sergeant": {
         "aar_points": 900,
         "approval": True
     },
@@ -305,6 +336,14 @@ CHALLENGE_REQUIREMENTS = {
     "Ancient": {
         "aar_points": 1200,
         "approval": True
+    }
+
+    ["Captain"]: = {
+    "approval": True
+    }
+
+    ["Chapter Master"]: = {
+    "approval": True
     }
 }
 
@@ -317,12 +356,16 @@ CHALLENGES = {
     "Helix Adept": {"auto": False},
     "Veteran": {"auto": True},
     "Bladeguard Veteran": {"auto": False},
-    "Techmarine": {"auto": False},
     "Sergeant": {"auto": False}, 
+    "Techmarine": {"auto": False},
     "Librarian": {"auto": False},
     "Apothecary": {"auto": False},
+    "Chaplain": {"auto": False},
     "Veteran-Sergeant": {"auto": False},
     "Ancient": {"auto": False},
+    "Captain": {"auto": False},
+    "Chapter Master": {"auto": False},
+    
 }
 CHALLENGE_CHOICES = [
     app_commands.Choice(name=name, value=name)
@@ -336,10 +379,10 @@ def get_rank_with_time(member, total):
     for threshold in sorted(RANKS.keys()):
         potential = RANKS[threshold]
 
-        # skip hidden progression ranks
         if potential in SPECIAL_RANKS:
             continue
-
+        if potential == ["Captain", "Chapter Master"]:
+            continue
         if total >= threshold:
             if potential == "Veteran" and days < 30:
                 continue
@@ -388,12 +431,18 @@ async def update_rank_cached(member: discord.Member, user: dict):
 
     new_rank = get_rank_with_time(member, user["aar_points"])
 
+    if new rank == "Captain":
+        return
+
     roles = {role.name: role for role in member.guild.roles}
 
     rank_roles = [roles.get(r) for r in RANKS.values()]
     rank_roles = [r for r in rank_roles if r]
 
-    remove = [r for r in rank_roles if r in member.roles and r.name != new_rank]
+    remove = [
+        r for r in rank_roles
+        if r in member.roles and r.name not in ["Chapter Master", new_rank]
+    ]
 
     if remove:
         await member.remove_roles(*remove)
@@ -840,6 +889,8 @@ async def challenge_progress(interaction: discord.Interaction, member: discord.M
 @bot.event
 async def on_ready():
     global db_lock, event_lock
+
+    initialize_database()
 
     if db_lock is None:
         db_lock = asyncio.Lock()
