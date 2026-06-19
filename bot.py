@@ -124,7 +124,7 @@ RANKS = {
     1200: "Ancient",
     1500: "Lieutenant",
     9999: "Captain", 
-    10000: "Chapter Master"
+    15000: "Chapter Master"
 }
 
 SPECIAL_RANKS = {
