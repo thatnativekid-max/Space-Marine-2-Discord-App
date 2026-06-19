@@ -21,5 +21,16 @@ A Discord automatic progression system.
 - Python 3.10+
 - discord.py 2.x
 
+## Command List
+/edit_aar_points (add or subtract points)
+/player_card (display player card)
+/approve_challenge (approve rank challenge)
+/operation_report 
+/stratagem _report
+/siege_report
+/pvp_report
+
 ## Credits
-Credits of this bot go to Chapter Master Ozu of the Exorcist 4ok discord.
+Credits of this app goes to Chapter Master Ozu of the Exorcist 40k discord.
+
+"As time continues and bugs are found I will comeback to edit this app from time to time" -Ozu
