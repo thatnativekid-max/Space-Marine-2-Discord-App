@@ -335,11 +335,11 @@ CHALLENGE_REQUIREMENTS = {
     "Ancient": {
         "aar_points": 1200,
         "approval": True
-    }
+    },
 
     "Captain": {
         "approval": True
-    }
+    },
 
     "Chapter Master": {
         "approval": True
