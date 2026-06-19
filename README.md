@@ -25,7 +25,7 @@ A Discord automatic progression system.
 /edit_aar_points (add or subtract points)
 /player_card (display player card)
 /approve_challenge (approve rank challenge)
-/operation_report 
+/operation_report
 /stratagem _report
 /siege_report
 /pvp_report
