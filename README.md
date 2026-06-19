@@ -20,3 +20,6 @@ A Discord automatic progression system.
 ## Requirements
 - Python 3.10+
 - discord.py 2.x
+
+## Credits
+Credits of this bot go to Chapter Master Ozu of the Exorcist 4ok discord.
